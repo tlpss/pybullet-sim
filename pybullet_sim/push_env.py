@@ -8,13 +8,13 @@ import numpy as np
 import pybullet as p
 import pybullet_data
 import tqdm
-from PIL import Image
+
 from pybullet_sim.assets.path import get_asset_root_folder
-from pybullet_sim.demonstrations import Demonstration, save_visual_demonstrations
-from pybullet_sim.pybullet_utils import disable_debug_rendering, enable_debug_rendering, get_pybullet_mode
+from pybullet_sim.hardware.gripper import WSG50
 from pybullet_sim.hardware.ur3e import UR3e
-from pybullet_sim.hardware.robotiq2F85 import WSG50, Robotiq2F85
 from pybullet_sim.hardware.zed2i import Zed2i
+from pybullet_sim.utils.demonstrations import Demonstration, save_visual_demonstrations
+from pybullet_sim.utils.pybullet_utils import disable_debug_rendering, enable_debug_rendering, get_pybullet_mode
 
 
 class OracleStates(Enum):
@@ -35,6 +35,7 @@ class UR3ePush(gym.Env):
     state observations:
     standard:
     """
+
     goal_l2_margin = 0.05
     primitive_max_push_distance = 0.15
     primitive_robot_eef_z = 0.02
@@ -124,9 +125,11 @@ class UR3ePush(gym.Env):
             # exploration as it will spawn close to the object every now and then, robustness as it will have to learn
             # to deal with arbitrary start positions.
             self.initial_eef_pose[:3] = self._get_random_eef_position()
-        
+
         self.gripper = WSG50()
-        self.robot = UR3e(eef_start_pose=self.initial_eef_pose, gripper=self.gripper, simulate_real_time=self.simulate_real_time)
+        self.robot = UR3e(
+            eef_start_pose=self.initial_eef_pose, gripper=self.gripper, simulate_real_time=self.simulate_real_time
+        )
         # only close gripper AFTER it was attached to robot! pybullet does weird stuff if you don't.
         self.gripper.close_gripper()
         self.initial_object_position[:2] = self.get_random_object_position(np.array(self.target_position[:2]))
@@ -208,7 +211,7 @@ class UR3ePush(gym.Env):
 
             eef_target_position = self.robot.get_eef_pose()[0:3] + action
             eef_target_position = self._clip_target_position(eef_target_position)
-            if np.linalg.norm(eef_target_position) < 0.55: # check if reachable by robot.
+            if np.linalg.norm(eef_target_position) < 0.55:  # check if reachable by robot.
                 self._move_robot(eef_target_position, speed=0.002, max_steps=100)
         # get new observation
         new_obs = self.get_current_observation()
@@ -478,7 +481,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
     env = UR3ePush(real_time=True, push_primitive=False, state_observation=False)
-    #env.collect_demonstrations(10, "demonstrations_dataset")
+    # env.collect_demonstrations(10, "demonstrations_dataset")
     done = True
     while True:
         if done:
@@ -487,7 +490,7 @@ if __name__ == "__main__":
         # angle = np.random.random(1).item() * 2 * np.pi
         # distance = np.random.random(1).item() * 0.2
         action = env.oracle_step()
-        #action = (np.random.random(3)-0.5)*0.1
+        # action = (np.random.random(3)-0.5)*0.1
         print(action)
         obs, reward, done, _ = env.step(action)
         print(obs.shape)

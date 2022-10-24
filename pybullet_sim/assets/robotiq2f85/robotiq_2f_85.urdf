@@ -126,7 +126,7 @@ and adapted (most notably fixed fingertip weights and disabled all collisions ex
       <geometry>
         <box size="0.022 0.00635 0.0375"/>
       </geometry>
- 
+
     </visual>
     <collision>
       <origin rpy="0 0 0" xyz="0 0 0"/>

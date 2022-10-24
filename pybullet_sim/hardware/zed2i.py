@@ -1,16 +1,17 @@
-import time
 from typing import Tuple
 
 import numpy as np
 import pybullet as p
 import pybullet_data
+
 from pybullet_sim.assets.path import get_asset_root_folder
+
 
 class Zed2i:
     """
     Simluated Zed2i camera in PyBullet.
 
-    FOV and image size are configurable to allow for simulation of the real-world flow of 
+    FOV and image size are configurable to allow for simulation of the real-world flow of
         1. capturing at FUllHD (@30 Hz)
         2. center-cropping the relevant piece of the image (reducing the FOV, keeping spatial resolution)
         3. (optionally downscaling that part (reducing spatial resolution, maintaining FOV)
@@ -18,17 +19,18 @@ class Zed2i:
     Doing this in sim would incur unnecessary rendering costs.
 
     """
+
     # default values for FullHD profile taken from
     # https://support.stereolabs.com/hc/en-us/articles/360007395634-What-is-the-camera-focal-length-and-field-of-view-
     z_range = (0.25, 3)
-    hw_image_size = (1920,1080)
+    hw_image_size = (1920, 1080)
     hw_focal_length_in_pixels = 1000
-    hw_vertical_fov = np.arctan(hw_image_size[1] / 2 / hw_focal_length_in_pixels) * 2  # pinhole 
+    hw_vertical_fov = np.arctan(hw_image_size[1] / 2 / hw_focal_length_in_pixels) * 2  # pinhole
     hw_vertical_fov_degrees = hw_vertical_fov * 180 / np.pi
 
-    def __init__(self, eye_position, image_size=(1920,1080), vertical_fov_degrees = 56.0, target_position=None):
+    def __init__(self, eye_position, image_size=(1920, 1080), vertical_fov_degrees=56.0, target_position=None):
         assert vertical_fov_degrees <= Zed2i.hw_vertical_fov_degrees, "fov cannot exceed the HW FOV.."
-        
+
         self.vertical_fov_degrees = vertical_fov_degrees
         self.image_size = image_size
         self.eye_position = eye_position
@@ -39,9 +41,10 @@ class Zed2i:
         # convention here: extrinsics == camera pose in world frame aka the transform from camera to world.
         # convert from OpenGL viewmatrix (effective image plane instead of conventional virtual image plane, obtained by rotating around camera )
         # openGL also stores column-major.. so transpose, then rotate around Y-axis and then invert (as OpenGL uses world to camera extrinsics)
-        self.extrinsics_matrix = np.linalg.inv(np.array([[1,0,0,0],[0,-1,0,0],[0,0,-1,0],[0,0,0,1]]) @ np.array(self.view_matrix).reshape(4,4).transpose())
-
-    
+        self.extrinsics_matrix = np.linalg.inv(
+            np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+            @ np.array(self.view_matrix).reshape(4, 4).transpose()
+        )
 
     def get_image(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -72,19 +75,18 @@ class Zed2i:
         return rgb, depth, segmentation
 
     def _get_instrinsics_matrix(self):
-        focal_in_pixels = self.image_size[1]/2/ np.tan(np.deg2rad(self.vertical_fov_degrees)/2)
-        intrinsics = np.zeros((3,3))
-        intrinsics[0,0] = focal_in_pixels
-        intrinsics[1,1] = focal_in_pixels
-        intrinsics[2,2] = 1.0
-        intrinsics[0,2] = self.image_size[0] / 2
-        intrinsics[1,2] = self.image_size[1] / 2
+        focal_in_pixels = self.image_size[1] / 2 / np.tan(np.deg2rad(self.vertical_fov_degrees) / 2)
+        intrinsics = np.zeros((3, 3))
+        intrinsics[0, 0] = focal_in_pixels
+        intrinsics[1, 1] = focal_in_pixels
+        intrinsics[2, 2] = 1.0
+        intrinsics[0, 2] = self.image_size[0] / 2
+        intrinsics[1, 2] = self.image_size[1] / 2
         return intrinsics
-    
 
     def _get_camera_matrices(self):
         """
-        Compute Camera intrinsics and extrinsics matrices 
+        Compute Camera intrinsics and extrinsics matrices
 
         """
 
@@ -112,12 +114,14 @@ class Zed2i:
         # with some additional thingies to avoid z-depth information loss.
         # http://ksimek.github.io/2013/06/03/calibrated_cameras_in_opengl/
         aspect_ratio = self.image_size[0] / self.image_size[1]
-        
+
         projection_matrix = p.computeProjectionMatrixFOV(
             self.vertical_fov_degrees, aspect_ratio, Zed2i.z_range[0], Zed2i.z_range[1]
         )
 
         return projection_matrix, view_matrix
+
+
 def test_camera_outputs():
     asset_path = get_asset_root_folder()
     p.connect(p.DIRECT)  # or p.DIRECT for non-graphical version
@@ -150,6 +154,7 @@ def test_camera_outputs():
 
 def explore_camera_output():
     import matplotlib.pyplot as plt
+
     asset_path = get_asset_root_folder()
     p.connect(p.GUI)  # or p.DIRECT for non-graphical version
     p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
@@ -158,10 +163,10 @@ def explore_camera_output():
     p.loadURDF(str(asset_path / "ur3e_workspace" / "workspace.urdf"), [0, -0.3, -0.01])
     p.loadURDF("cube.urdf", [0, 0, 0.04], globalScaling=0.1)
 
-    cam = Zed2i([0, -0.31, 1.0001], image_size=(100,100),vertical_fov_degrees=56,target_position=[0, -0.2, 0.0])
-    
+    cam = Zed2i([0, -0.31, 1.0001], image_size=(100, 100), vertical_fov_degrees=56, target_position=[0, -0.2, 0.0])
+
     # geht pixel coords of origin and manually verify on the image!
-    img_point=   np.linalg.inv(cam.extrinsics_matrix) @ np.array([0,0,0.04,1])
+    img_point = np.linalg.inv(cam.extrinsics_matrix) @ np.array([0, 0, 0.04, 1])
     print(f"{img_point=}")
     coordinate = cam.intrinsics_matrix @ img_point[:3]
     print(f"{coordinate=}")

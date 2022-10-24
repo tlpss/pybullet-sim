@@ -5,10 +5,12 @@ import numpy as np
 import pybullet
 import pybullet as p
 import pybullet_data
+
 from pybullet_sim.assets.path import get_asset_root_folder
-from pybullet_sim.pybullet_utils import HideOutput
+from pybullet_sim.utils.pybullet_utils import HideOutput
+
 asset_path = get_asset_root_folder()
-from pybullet_sim.hardware.robotiq2F85 import Gripper
+from pybullet_sim.hardware.gripper import Gripper
 
 
 class UR3e:
@@ -17,7 +19,9 @@ class UR3e:
     Uses IKFast to improve on the (limited) inverse kinematics of Bullet.
     """
 
-    def __init__(self, robot_base_position=None,eef_start_pose=None,gripper: Gripper= None, simulate_real_time=False):
+    def __init__(
+        self, robot_base_position=None, eef_start_pose=None, gripper: Gripper = None, simulate_real_time=False
+    ):
         self.simulate_real_time = simulate_real_time
         self.homej = np.array([-0.5, -0.5, 0.5, -0.5, -0.5, -0.5]) * np.pi
 
@@ -37,15 +41,18 @@ class UR3e:
         self.eef_id = 9  # manually determined
 
         self.gripper = gripper
-        self.tcp_offset = None # offset for Tool Center Point, can be used to account for EEF
+        self.tcp_offset = None  # offset for Tool Center Point, can be used to account for EEF
         if self.gripper:
             self.tcp_offset = gripper.tcp_offset
 
-        try: 
+        try:
             from ur_ikfast import ur_kinematics
+
             self.ikfast_ur3e_solver = ur_kinematics.URKinematics("ur3e")
         except ImportError:
-            logging.info("could not import IKFast, resorting to pybullet IK. This will seriously degrade IK performance. Please install IKfast")
+            logging.info(
+                "could not import IKFast, resorting to pybullet IK. This will seriously degrade IK performance. Please install IKfast"
+            )
             self.ikfast_ur3e_solver = None
 
         self.reset(eef_start_pose)
@@ -68,13 +75,14 @@ class UR3e:
 
         if self.gripper:
             self.gripper.reset(self._get_robot_pose())
-            self.gripper.attach_with_constraint_to_robot(self.robot_id,self.eef_id)
+            self.gripper.attach_with_constraint_to_robot(self.robot_id, self.eef_id)
 
     def _get_robot_pose(self) -> np.ndarray:
-                link_info = p.getLinkState(self.robot_id, self.eef_id)
-                position = link_info[0]
-                orientation = link_info[1]
-                return  np.array(position + orientation)
+        link_info = p.getLinkState(self.robot_id, self.eef_id)
+        position = link_info[0]
+        orientation = link_info[1]
+        return np.array(position + orientation)
+
     def get_eef_pose(self) -> np.ndarray:
         """
 
@@ -84,6 +92,7 @@ class UR3e:
         if self.gripper:
             pose[:3] -= self.tcp_offset
         return pose
+
     def get_joint_configuration(self) -> np.ndarray:
         """
 
@@ -145,15 +154,15 @@ class UR3e:
         # todo: linear EEF motions
         raise NotImplementedError
 
-    def solve_ik(self, pose:np.ndarray) -> np.ndarray:
+    def solve_ik(self, pose: np.ndarray) -> np.ndarray:
         pose = np.copy(pose)
-        #to get robot tooltip pose:
+        # to get robot tooltip pose:
         # get TCP offset
         # compute the offset along the pose orientation -> subtract from position
         if self.gripper:
-            #TODO: only works for top-down poses... should take orientation into account.
+            # TODO: only works for top-down poses... should take orientation into account.
             pose[:3] += self.tcp_offset
-        
+
         if self.ikfast_ur3e_solver:
             return self._solve_ik_ikfast(pose)
         else:

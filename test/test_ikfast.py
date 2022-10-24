@@ -2,24 +2,31 @@ import unittest
 
 import numpy as np
 
-from ur_ikfast import ur_kinematics
-
 
 class TestUR3eIKfast(unittest.TestCase):
     def test(self):
-        ur3e_arm = ur_kinematics.URKinematics("ur3e")
-        joint_angles = [-1.6, -1.6, 1.6, -1.6, -1.6, 0.0]  # in radians
-        pose_quat = ur3e_arm.forward(joint_angles)
+        try:
+            from ur_ikfast import ur_kinematics
+            ikfast = True
+        except ImportError:
+            ikfast = False
 
-        # check if pose is almost same..
+        if ikfast:
+            ur3e_arm = ur_kinematics.URKinematics("ur3e")
+            joint_angles = [-1.6, -1.6, 1.6, -1.6, -1.6, 0.0]  # in radians
+            pose_quat = ur3e_arm.forward(joint_angles)
 
-        # check for analytical singularity quick fix.
-        pose_quat = [-0.2, -0.2, 0.2, 0.0, 1.0, 0.0, 0]
-        pose_quat[4:] += np.random.randn(3) * 0.01
-        self.assertNotEqual(ur3e_arm.inverse(pose_quat, False, q_guess=joint_angles).all(),None)
+            # check if pose is almost same..
+
+            # check for analytical singularity quick fix.
+            pose_quat = [-0.2, -0.2, 0.2, 0.0, 1.0, 0.0, 0]
+            pose_quat[4:] += np.random.randn(3) * 0.01
+            self.assertNotEqual(ur3e_arm.inverse(pose_quat, False, q_guess=joint_angles).all(), None)
 
 
 if __name__ == "__main__":
+    from ur_ikfast import ur_kinematics
+
     ur3e_arm = ur_kinematics.URKinematics("ur3e")
 
     """

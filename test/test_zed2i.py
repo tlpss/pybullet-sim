@@ -3,15 +3,16 @@ import unittest
 
 import pybullet as p
 import pybullet_data
+
 from pybullet_sim.assets.path import get_asset_root_folder
-from pybullet_sim.zed2i import Zed2i
+from pybullet_sim.hardware.zed2i import Zed2i
 
 
 class TestZed2i(unittest.TestCase):
     def setUp(self):
         asset_path = get_asset_root_folder()
         if not p.isConnected():
-            p.connect(p.GUI)  # or p.DIRECT for non-graphical version
+            p.connect(p.DIRECT)  # or p.DIRECT for non-graphical version
             p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
             p.setGravity(0, 0, -10)
             p.loadURDF("plane.urdf", [0, 0, -1.0])
@@ -38,10 +39,10 @@ class TestZed2i(unittest.TestCase):
         # check this is really the z-buffer, not the distance to the eye of the camera
         # note that the color map in the GUI does not clearly show the depth differences.
         self.assertAlmostEqual(
-            cube_distance, 0.95
+            cube_distance, 0.95, places=5
         )  # camera at 1m of origin, cube has width of 10cm, centered on origin
         self.assertAlmostEqual(
-            cube_distance2, 0.95
+            cube_distance2, 0.95, places=5
         )  # camera at 1m of origin, cube has width of 10cm, centered on origin
         time.sleep(2)
 
