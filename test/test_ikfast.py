@@ -7,6 +7,7 @@ class TestUR3eIKfast(unittest.TestCase):
     def test(self):
         try:
             from ur_ikfast import ur_kinematics
+
             ikfast = True
         except ImportError:
             ikfast = False

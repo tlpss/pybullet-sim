@@ -1,16 +1,18 @@
+import logging
 import os
 import sys
 
 import pybullet as p
-import logging
+
 
 def get_pybullet_mode():
-    pybullet_mode = os.getenv('pybullet_mode')
+    pybullet_mode = os.getenv("pybullet_mode")
     logging.info(f"pybullet mode environment variable = {pybullet_mode}")
-    if  pybullet_mode == 'GUI':
+    if pybullet_mode == "GUI":
         return p.GUI
     else:
         return p.DIRECT
+
 
 class HideOutput(object):
     # Taken from Pybullet Tools at https://github.com/caelan/pybullet-planning/tree/master/pybullet_tools

@@ -10,6 +10,5 @@ setuptools.setup(
     install_requires=[
         # requirements.txt used as it is not possible -e install?
         #  and ur_ikfast requires this.
-        "ur_ikfast",
     ],
 )
