@@ -10,8 +10,6 @@ from pybullet_sim.pybullet_utils import HideOutput
 asset_path = get_asset_root_folder()
 from pybullet_sim.hardware.robotiq2F85 import Gripper
 
-from ur_ikfast import ur_kinematics
-
 
 class UR3e:
     """
@@ -43,7 +41,12 @@ class UR3e:
         if self.gripper:
             self.tcp_offset = gripper.tcp_offset
 
-        self.ikfast_ur3e_solver = ur_kinematics.URKinematics("ur3e")
+        try: 
+            from ur_ikfast import ur_kinematics
+            self.ikfast_ur3e_solver = ur_kinematics.URKinematics("ur3e")
+        except ImportError:
+            logging.info("could not import IKFast, resorting to pybullet IK. This will seriously degrade IK performance. Please install IKfast")
+            self.ikfast_ur3e_solver = None
 
         self.reset(eef_start_pose)
 
@@ -58,7 +61,7 @@ class UR3e:
             p.resetJointState(self.robot_id, self.joint_ids[i], self.homej[i])
 
         if pose is not None:
-            joint_config = self.solve_ik_ikfast(pose)
+            joint_config = self.solve_ik(pose)
             # Move robot to target pose starting from the home joint configuration.
             for i in range(len(self.joint_ids)):
                 p.resetJointState(self.robot_id, self.joint_ids[i], joint_config[i])
@@ -135,29 +138,35 @@ class UR3e:
 
         :param pose: a 7D pose - position [meters] + orientation [Quaternion, radians]
         """
-        targj = self.solve_ik_ikfast(pose)
+        targj = self.solve_ik(pose)
         return self.movej(targj, speed, max_steps)
 
     def movep_linear(self, pose: np.ndarray, speed=1.5):
         # todo: linear EEF motions
         raise NotImplementedError
 
-    def solve_ik_ikfast(self, pose: np.ndarray) -> np.ndarray:
-        p = np.copy(pose)
+    def solve_ik(self, pose:np.ndarray) -> np.ndarray:
+        pose = np.copy(pose)
         #to get robot tooltip pose:
         # get TCP offset
         # compute the offset along the pose orientation -> subtract from position
         if self.gripper:
-            p[:3] += self.tcp_offset
+            #TODO: only works for top-down poses... should take orientation into account.
+            pose[:3] += self.tcp_offset
+        
+        if self.ikfast_ur3e_solver:
+            return self._solve_ik_ikfast(pose)
+        else:
+            return self._solve_ik_pybullet(pose)
 
-
+    def _solve_ik_ikfast(self, pose: np.ndarray) -> np.ndarray:
         targj = None
         for _ in range(6):
             # fix for axis-aligned orientations (which is often used in e.g. top-down EEF orientations
             # add random noise to the EEF orienation to avoid axis-alignment
             # see https://github.com/cambel/ur_ikfast/issues/4
-            p[3:] += np.random.randn(4) * 0.01
-            targj = self.ikfast_ur3e_solver.inverse(p, q_guess=self.homej)
+            pose[3:] += np.random.randn(4) * 0.01
+            targj = self.ikfast_ur3e_solver.inverse(pose, q_guess=self.homej)
             if targj is not None:
                 break
 
@@ -165,13 +174,14 @@ class UR3e:
             raise ValueError("IKFast failed... most likely the pose is out of reach of the robot?")
         return targj
 
-    def solve_ik(self, pose: np.ndarray) -> np.ndarray:
+    def _solve_ik_pybullet(self, pose: np.ndarray) -> np.ndarray:
         """Calculate joint configuration with inverse kinematics.
 
         :param pose: a 7D pose - position [meters] + orientation [Quaternion, radians]
 
         :return a 6D joint configuration
         """
+
         joints = p.calculateInverseKinematics(
             bodyUniqueId=self.robot_id,
             endEffectorLinkIndex=self.eef_id,
@@ -181,7 +191,7 @@ class UR3e:
             # note that these limit the workspace of the robot!
             # with a decent planner such constraints are not required nor desirable.
             # also note that unreachable poses will still return a configuration...
-            lowerLimits=[-5 / 4 * np.pi, -np.pi, 0, -1.2 * np.pi, -np.pi, -2 * np.pi],
+            lowerLimits=[-5 / 4 * np.pi, -np.pi, 0, -0.99 * np.pi, -np.pi, -2 * np.pi],
             upperLimits=[2 * np.pi / 4, 0, np.pi, -0.2 * np.pi, 0, 2 * np.pi],
             jointRanges=[1.5 * np.pi, np.pi, np.pi, np.pi, np.pi, 4 * np.pi],
             restPoses=np.float32(self.homej).tolist(),
@@ -215,7 +225,7 @@ if __name__ == "__main__":
     tableId = p.loadURDF(str(asset_path / "ur3e_workspace" / "workspace.urdf"), [0, -0.3, -0.01])
     robot = UR3e(simulate_real_time=True)
     pose = [0.3, -0.0, 0.2]
-    pose.extend(p.getQuaternionFromEuler([0.0, 0.0, 0.0]))
+    pose.extend(p.getQuaternionFromEuler([np.pi, 0.0, 0.0]))
     pose = np.array(pose)
     robot.movep(pose, max_steps=2000)
     pose = [0.3, -0.4, 0.1]
