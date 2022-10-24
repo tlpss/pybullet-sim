@@ -11,7 +11,7 @@ import tqdm
 from PIL import Image
 from pybullet_sim.assets.path import get_asset_root_folder
 from pybullet_sim.demonstrations import Demonstration, save_visual_demonstrations
-from pybullet_sim.pybullet_utils import disable_debug_rendering, enable_debug_rendering
+from pybullet_sim.pybullet_utils import disable_debug_rendering, enable_debug_rendering, get_pybullet_mode
 from pybullet_sim.hardware.ur3e import UR3e
 from pybullet_sim.hardware.robotiq2F85 import WSG50, Robotiq2F85
 from pybullet_sim.hardware.zed2i import Zed2i
@@ -104,7 +104,7 @@ class UR3ePush(gym.Env):
             p.resetSimulation()
         else:
             # initialize pybullet
-            p.connect(p.DIRECT)  # or p.DIRECT for non-graphical version
+            p.connect(get_pybullet_mode())  # or p.DIRECT for non-graphical version
 
         p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
         p.setGravity(0, 0, -9.81)
@@ -477,8 +477,8 @@ class UR3ePush(gym.Env):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
-    env = UR3ePush(real_time=False, push_primitive=False, state_observation=False)
-    env.collect_demonstrations(10, "demonstrations_dataset")
+    env = UR3ePush(real_time=True, push_primitive=False, state_observation=False)
+    #env.collect_demonstrations(10, "demonstrations_dataset")
     done = True
     while True:
         if done:
