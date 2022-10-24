@@ -1,0 +1,12 @@
+Pillow
+matplotlib
+pybullet==3.2.5
+gym==0.21 # SB3 not yet compatible with 0.26 -> use old API for now
+numpy
+pre-commit
+imageio
+# ik fast
+Cython
+-e git+https://github.com/cambel/ur_ikfast.git#egg=ur_ikfast
+# this repo
+-e .
