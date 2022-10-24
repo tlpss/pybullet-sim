@@ -31,8 +31,11 @@ class UR3ePick(gym.Env):
     image_dimensions = (64, 64)
 
     initial_eef_pose = [0.4, 0.1, 0.2, 1, 0, 0, 0]  # robot should be out of view.
-    pick_workspace_x_range = (-0.15, 0.15)
-    pick_workspace_y_range = (-0.4, -0.2)
+    pick_workspace_x_range = (
+        -0.125,
+        0.125,
+    )  # all should be reachable by the robot, and should be square (square images)
+    pick_workspace_y_range = (-0.45, -0.2)
 
     def __init__(
         self,
@@ -46,18 +49,18 @@ class UR3ePick(gym.Env):
         self.use_spatial_action_map = use_spatial_action_map
 
         if not self.use_motion_primitive:
-            assert not self.use_spatial_action_map  # can only use spatial action maps with
+            assert not self.use_spatial_action_map  # can only use spatial action maps with primitive
             raise NotImplementedError
         if object_config is None:
             self.object_config = ObjectConfig()
 
-        # camera on part of the workspace that is reachable and does not have the robot or bin in view
+        # camera on pick workspace (all corners should be reachable)
         # make camera high and very small fov, to approximate an orthographic view (Andy Zeng uses orthographic reprojection through point cloud)
         self.camera = Zed2i(
-            [-0.03, -0.3301, 1.5],
-            vertical_fov_degrees=15,
+            [-0.0, -0.3251, 1.0],
+            vertical_fov_degrees=14,
             image_size=UR3ePick.image_dimensions,
-            target_position=[-0.03, -0.33, 0],
+            target_position=[-0.0, -0.325, 0],
         )
 
         self.current_episode_duration = 0
@@ -82,6 +85,22 @@ class UR3ePick(gym.Env):
         p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, 1)
 
         # TODO: make resets more efficient, avoid loading all the URDFs every time.
+        p.addUserDebugLine(
+            [self.pick_workspace_x_range[0], self.pick_workspace_y_range[0], 0.01],
+            [self.pick_workspace_x_range[0], self.pick_workspace_y_range[1], 0.01],
+        )
+        p.addUserDebugLine(
+            [self.pick_workspace_x_range[0], self.pick_workspace_y_range[1], 0.01],
+            [self.pick_workspace_x_range[1], self.pick_workspace_y_range[1], 0.01],
+        )
+        p.addUserDebugLine(
+            [self.pick_workspace_x_range[1], self.pick_workspace_y_range[0], 0.01],
+            [self.pick_workspace_x_range[1], self.pick_workspace_y_range[1], 0.01],
+        )
+        p.addUserDebugLine(
+            [self.pick_workspace_x_range[1], self.pick_workspace_y_range[0], 0.01],
+            [self.pick_workspace_x_range[0], self.pick_workspace_y_range[0], 0.01],
+        )
 
         p.resetDebugVisualizerCamera(cameraDistance=1.8, cameraYaw=0, cameraPitch=-45, cameraTargetPosition=[0, 0, 0])
         self.plane_id = p.loadURDF("plane.urdf", [0, 0, -1.0])
@@ -156,9 +175,6 @@ class UR3ePick(gym.Env):
             grasp_position[2] - 0.02, 0.01
         )  # position is top of object -> graps 2cm below unless this < 0.01cm.
 
-        if np.linalg.norm(grasp_position) > 0.45:
-            logger.info(f"grasp position was not reachable {grasp_position}")
-            return
         grasp_orientation = grasp_pose[3]
         pregrasp_position = np.copy(grasp_position)
         pregrasp_position[2] += 0.15
@@ -259,7 +275,7 @@ if __name__ == "__main__":
 
     import matplotlib.pyplot as plt
 
-    # logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     env = UR3ePick()
     obs = env.reset()
