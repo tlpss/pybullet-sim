@@ -10,7 +10,6 @@ import pybullet_data
 import tqdm
 
 from pybullet_sim.assets.path import get_asset_root_folder
-from pybullet_sim.hardware.gripper import WSG50
 from pybullet_sim.hardware.ur3e import UR3e
 from pybullet_sim.hardware.zed2i import Zed2i
 from pybullet_sim.utils.demonstrations import Demonstration, save_visual_demonstrations
@@ -126,12 +125,8 @@ class UR3ePush(gym.Env):
             # to deal with arbitrary start positions.
             self.initial_eef_pose[:3] = self._get_random_eef_position()
 
-        self.gripper = WSG50()
-        self.robot = UR3e(
-            eef_start_pose=self.initial_eef_pose, gripper=self.gripper, simulate_real_time=self.simulate_real_time
-        )
-        # only close gripper AFTER it was attached to robot! pybullet does weird stuff if you don't.
-        self.gripper.close_gripper()
+        self.robot = UR3e(eef_start_pose=self.initial_eef_pose, simulate_real_time=self.simulate_real_time)
+
         self.initial_object_position[:2] = self.get_random_object_position(np.array(self.target_position[:2]))
         self.disc_id = p.loadURDF(
             str(self.asset_path / "cylinder" / "1:2cylinder.urdf"), self.initial_object_position, globalScaling=0.1
@@ -167,7 +162,7 @@ class UR3ePush(gym.Env):
                 obs = self._get_robot_eef_position()
             obs.extend(self._get_object_position_on_plane())
             obs.extend(self._get_target_position_on_plane())
-            return obs
+            return np.array(obs)
         else:
             rgb, depth, _ = self.camera.get_image()
             return rgb
@@ -480,7 +475,7 @@ class UR3ePush(gym.Env):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
-    env = UR3ePush(real_time=True, push_primitive=False, state_observation=False)
+    env = UR3ePush(real_time=True, push_primitive=False, state_observation=True)
     # env.collect_demonstrations(10, "demonstrations_dataset")
     done = True
     while True:
