@@ -4,6 +4,7 @@ import random
 from typing import List
 
 import gym
+from gym import spaces
 import numpy as np
 import pybullet as p
 import pybullet_data
@@ -43,10 +44,16 @@ class UR3ePick(gym.Env):
         use_motion_primitive=True,
         simulate_realtime=True,
         object_config: ObjectConfig = None,
+        pybullet_mode = None,
     ) -> None:
         self.simulate_realtime = simulate_realtime
         self.use_motion_primitive = use_motion_primitive
         self.use_spatial_action_map = use_spatial_action_map
+        self.pybullet_mode = pybullet_mode
+        if self.pybullet_mode is None:
+                self.pybullet_mode = get_pybullet_mode()
+        self.observation_space = spaces.Box(low=0,high=2,shape=(self.image_dimensions[0],self.image_dimensions[1],4),dtype=np.float16)
+        self.action_space = spaces.Box(low=np.array([self.pick_workspace_x_range[0],self.pick_workspace_y_range[0],0.001,0]),high=np.array([self.pick_workspace_x_range[1],self.pick_workspace_y_range[1],0.1,np.pi]))
 
         if not self.use_motion_primitive:
             assert not self.use_spatial_action_map  # can only use spatial action maps with primitive
@@ -77,7 +84,7 @@ class UR3ePick(gym.Env):
             p.resetSimulation()
         else:
             # initialize pybullet
-            p.connect(get_pybullet_mode())  # or p.DIRECT for non-graphical version
+            p.connect(self.pybullet_mode)  # or p.DIRECT for non-graphical version
         disable_debug_rendering()  # will do nothing if not enabled.
 
         p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
@@ -137,8 +144,8 @@ class UR3ePick(gym.Env):
         self.current_episode_duration += 1
 
         if self.use_motion_primitive:
+            # convert (u,v,theta) to (x,y,z,theta)
             if self.use_spatial_action_map:
-                # convert (u,v,theta) to (x,y,z,theta)
                 position = self._image_coords_to_world(
                     int(action[0]), int(action[1]), self.get_current_observation()[..., 3]
                 )
@@ -213,6 +220,9 @@ class UR3ePick(gym.Env):
         if self.use_motion_primitive:
             return self._oracle_get_pick_pose()
 
+    def render(self,mode=None):
+        rgb, _, _ = self.camera.get_image()
+        return rgb
     def _oracle_get_pick_pose(self) -> np.ndarray:
         # get heighest object from list
         random_object_id = np.random.choice(
@@ -277,17 +287,15 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
 
-    env = UR3ePick()
+    env = UR3ePick(simulate_realtime=True)
+    
+    start_time = time.time()
     obs = env.reset()
+    post_reset_time = time.time()
     done = False
     while not done:
         img = obs[:, :, :3]
-        print(np.max(img))
-        print(np.min(img))
         plt.imshow(obs[:, :, :3])
-        plt.show()
-        plt.savefig("test.jpg")
-        plt.imshow(obs[:, :, -1])
         plt.show()
         u = int(input("u"))
         v = int(input("v"))
@@ -296,5 +304,6 @@ if __name__ == "__main__":
         print(position)
         obs, reward, done, _ = env.step(np.concatenate([position, np.zeros((1,))]))
         # obs, reward, done ,_ = env.step(env.get_oracle_action())
-
-    time.sleep(30)
+    done_time = time.time()
+    print(f"reset duration = {post_reset_time - start_time}")
+    print(f"episode time = {done_time - post_reset_time}")
