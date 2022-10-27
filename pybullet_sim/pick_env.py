@@ -224,7 +224,7 @@ class UR3ePick(gym.Env):
                 self._move_robot(pregrasp_position, grasp_orientation, speed=0.005)
             else:
                 self._move_robot_no_physics(pregrasp_position, grasp_orientation)
-            self._move_robot(grasp_position, grasp_orientation)
+            self._move_robot(grasp_position, grasp_orientation, max_steps=500)
             self.gripper.close_gripper(max_force=50)
             self._move_robot(pregrasp_position)
 
