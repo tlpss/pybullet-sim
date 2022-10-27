@@ -4,10 +4,10 @@ import random
 from typing import List
 
 import gym
-from gym import spaces
 import numpy as np
 import pybullet as p
 import pybullet_data
+from gym import spaces
 
 from pybullet_sim.assets.path import get_asset_root_folder
 from pybullet_sim.hardware.gripper import WSG50
@@ -44,16 +44,21 @@ class UR3ePick(gym.Env):
         use_motion_primitive=True,
         simulate_realtime=True,
         object_config: ObjectConfig = None,
-        pybullet_mode = None,
+        pybullet_mode=None,
     ) -> None:
         self.simulate_realtime = simulate_realtime
         self.use_motion_primitive = use_motion_primitive
         self.use_spatial_action_map = use_spatial_action_map
         self.pybullet_mode = pybullet_mode
         if self.pybullet_mode is None:
-                self.pybullet_mode = get_pybullet_mode()
-        self.observation_space = spaces.Box(low=0,high=2,shape=(self.image_dimensions[0],self.image_dimensions[1],4),dtype=np.float16)
-        self.action_space = spaces.Box(low=np.array([self.pick_workspace_x_range[0],self.pick_workspace_y_range[0],0.001,0]),high=np.array([self.pick_workspace_x_range[1],self.pick_workspace_y_range[1],0.1,np.pi]))
+            self.pybullet_mode = get_pybullet_mode()
+        self.observation_space = spaces.Box(
+            low=0, high=2, shape=(self.image_dimensions[0], self.image_dimensions[1], 4), dtype=np.float16
+        )
+        self.action_space = spaces.Box(
+            low=np.array([self.pick_workspace_x_range[0], self.pick_workspace_y_range[0], 0.001, 0]),
+            high=np.array([self.pick_workspace_x_range[1], self.pick_workspace_y_range[1], 0.1, np.pi]),
+        )
 
         if not self.use_motion_primitive:
             assert not self.use_spatial_action_map  # can only use spatial action maps with primitive
@@ -133,8 +138,8 @@ class UR3ePick(gym.Env):
             p.changeVisualShape(id, -1, rgbaColor=random.choice(self.object_config.colors))
             p.changeDynamics(id, -1, lateralFriction=5.0)
             self.object_ids.append(id)
-            for _ in range(200):
-                p.stepSimulation()
+
+        self._wait_untill_all_objects_stop_moving()
         if self.simulate_realtime:
             enable_debug_rendering()
 
@@ -166,6 +171,11 @@ class UR3ePick(gym.Env):
         # move robot back to initial pose
         self._move_robot(UR3ePick.initial_eef_pose[:3], speed=0.005)
 
+        # now wait untill all objects have stopped moving before taking an image
+        # slightly unrealistic but it helps to make things Markovian
+        # which makes it easier to learn for the policy.
+
+        self._wait_untill_all_objects_stop_moving()
         done = self._done()  # after bookkeeping!
         new_observation = self.get_current_observation()
         return new_observation, reward, done, {}
@@ -198,9 +208,21 @@ class UR3ePick(gym.Env):
         if self.use_motion_primitive:
             return self._is_grasp_succesfull() * 1.0
 
+    def _is_object_outside_of_workspace(self, object_id: int) -> bool:
+        position, _ = p.getBasePositionAndOrientation(object_id)
+        x, y, z = position
+
+        for coord, range in zip([x, y], [self.pick_workspace_x_range, self.pick_workspace_y_range]):
+            if coord < range[0] or coord > range[1]:
+                return True
+        return False
+
+    def _prune_objects_outside_of_workspace(self):
+        for object_id in self.object_ids:
+            if self._is_object_outside_of_workspace(object_id):
+                self.object_ids.remove(object_id)
+
     def _done(self):
-        # no attempt to verify if all objects are still reachable..
-        # TODO: fix!
         done = len(self.object_ids) == 0
         done = done or self.current_episode_duration >= self.max_episode_duration
         return done
@@ -220,9 +242,10 @@ class UR3ePick(gym.Env):
         if self.use_motion_primitive:
             return self._oracle_get_pick_pose()
 
-    def render(self,mode=None):
+    def render(self, mode=None):
         rgb, _, _ = self.camera.get_image()
         return rgb
+
     def _oracle_get_pick_pose(self) -> np.ndarray:
         # get heighest object from list
         random_object_id = np.random.choice(
@@ -279,31 +302,51 @@ class UR3ePick(gym.Env):
             heights.append(state[0][2])
         return heights
 
+    def _is_any_object_moving(self) -> bool:
+        for object in self.object_ids:
+            lin_vel, angular_vel = p.getBaseVelocity(object)
+            if np.linalg.norm(np.array(list(lin_vel))) > 0.05 or np.linalg.norm(np.array(list(angular_vel))) > 0.01:
+                return True
+        return False
+
+    def _wait_untill_all_objects_stop_moving(self):
+        # make sure objects get a chance to move
+        for _ in range(30):
+            p.stepSimulation()
+        # keep stepping untill all have stopped moving
+        while self._is_any_object_moving():
+            p.stepSimulation()
+            if self.simulate_realtime:
+                pass
+                # not simulate this in realtime to increase speed.
+                # might result in some strange behaviour but does not influence
+                # the robot interactions..
+                # time.sleep(1/240)
+
 
 if __name__ == "__main__":
     import time
 
-    import matplotlib.pyplot as plt
-
     logging.basicConfig(level=logging.INFO)
 
-    env = UR3ePick(simulate_realtime=True)
-    
+    env = UR3ePick(simulate_realtime=True, pybullet_mode=p.GUI)
+
     start_time = time.time()
     obs = env.reset()
     post_reset_time = time.time()
     done = False
     while not done:
-        img = obs[:, :, :3]
-        plt.imshow(obs[:, :, :3])
-        plt.show()
-        u = int(input("u"))
-        v = int(input("v"))
-        print(obs[u, v, -1])
-        position = env._image_coords_to_world(u, v, obs[:, :, -1])
-        print(position)
-        obs, reward, done, _ = env.step(np.concatenate([position, np.zeros((1,))]))
-        # obs, reward, done ,_ = env.step(env.get_oracle_action())
+        # img = obs[:, :, :3]
+        # plt.imshow(obs[:, :, :3])
+        # plt.show()
+        # u = int(input("u"))
+        # v = int(input("v"))
+        # print(obs[u, v, -1])
+        # position = env._image_coords_to_world(u, v, obs[:, :, -1])
+        # print(position)
+        # obs, reward, done, _ = env.step(np.concatenate([position, np.zeros((1,))]))
+        obs, reward, done, _ = env.step(env.get_oracle_action())
     done_time = time.time()
+
     print(f"reset duration = {post_reset_time - start_time}")
     print(f"episode time = {done_time - post_reset_time}")
