@@ -136,7 +136,7 @@ class UR3ePick(gym.Env):
             position[1] = np.random.uniform(UR3ePick.pick_workspace_y_range[0], UR3ePick.pick_workspace_y_range[1])
             id = p.loadURDF(object_type["path"], position, globalScaling=scale)
             p.changeVisualShape(id, -1, rgbaColor=random.choice(self.object_config.colors))
-            p.changeDynamics(id, -1, lateralFriction=5.0)
+            p.changeDynamics(id, -1, lateralFriction=1.0)
             self.object_ids.append(id)
 
         self._wait_untill_all_objects_stop_moving()
