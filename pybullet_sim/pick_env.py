@@ -183,16 +183,22 @@ class UR3ePick(gym.Env):
         if success:
             # move to bin (only visually pleasing?) and
             # remove object from list.
-            self.workspace_object_ids.remove(self._get_lifted_object_id())
-            self._drop_in_bin()
+            lifted_object_id = self._get_lifted_object_id()
+            self._drop_in_bin(lifted_object_id)
+            self.workspace_object_ids.remove(lifted_object_id)
+
         # move robot back to initial pose
-        self._move_robot(UR3ePick.initial_eef_pose[:3], speed=0.005)
+        if self.simulate_realtime:
+            self._move_robot(UR3ePick.initial_eef_pose[:3], speed=0.005)
+        else:
+            self._move_robot_no_physics(UR3ePick.initial_eef_pose[:3])
 
         # now wait untill all objects have stopped moving before taking an image
         # slightly unrealistic but it helps to make things Markovian
         # which makes it easier to learn for the policy.
 
         self._wait_untill_all_objects_stop_moving()
+        self._prune_objects_outside_of_workspace()
         done = self._done()  # after bookkeeping!
         new_observation = self.get_current_observation()
         return new_observation, reward, done, {}
@@ -214,10 +220,14 @@ class UR3ePick(gym.Env):
         pregrasp_position[2] += 0.15
         try:
             self.gripper.open_gripper()
-            self._move_robot(pregrasp_position, grasp_orientation, speed=0.005)
+            if self.simulate_realtime:
+                self._move_robot(pregrasp_position, grasp_orientation, speed=0.005)
+            else:
+                self._move_robot_no_physics(pregrasp_position, grasp_orientation)
             self._move_robot(grasp_position, grasp_orientation)
             self.gripper.close_gripper(max_force=50)
             self._move_robot(pregrasp_position)
+
         except Exception as e:
             print(f"COULD NOT EXECUTE PRIMITIVE, exception = {e}")
 
@@ -237,7 +247,10 @@ class UR3ePick(gym.Env):
     def _prune_objects_outside_of_workspace(self):
         for object_id in self.workspace_object_ids:
             if self._is_object_outside_of_workspace(object_id):
+                logging.debug("removed an object as it was no longer inside the workspace")
                 self.workspace_object_ids.remove(object_id)
+                self.all_object_ids.remove(object_id)
+                p.removeBody(object_id)
 
     def _done(self):
         done = len(self.workspace_object_ids) == 0
@@ -246,14 +259,24 @@ class UR3ePick(gym.Env):
 
     def _move_robot(self, position: np.array, gripper_z_orientation: float = 0.0, speed=0.001, max_steps=1000):
 
-        eef_target_position = np.zeros(7)
-        eef_target_position[3:] = p.getQuaternionFromEuler([np.pi, 0.0, gripper_z_orientation])
-        eef_target_position[0:3] = position
+        eef_target_pose = np.zeros(7)
+        eef_target_pose[3:] = p.getQuaternionFromEuler([np.pi, 0.0, gripper_z_orientation])
+        eef_target_pose[0:3] = position
         # eef_target_position = self._clip_target_position(eef_target_position)
 
-        logger.debug(f"target EEF pose = {eef_target_position.tolist()[:3]}")
+        logger.debug(f"target EEF pose = {eef_target_pose.tolist()[:3]}")
 
-        self.robot.movep(eef_target_position, speed=speed, max_steps=max_steps)
+        self.robot.movep(eef_target_pose, speed=speed, max_steps=max_steps)
+
+    def _move_robot_no_physics(self, position: np.array, gripper_z_orientation: float = 0.0):
+        eef_target_pose = np.zeros(7)
+        eef_target_pose[3:] = p.getQuaternionFromEuler([np.pi, 0.0, gripper_z_orientation])
+        eef_target_pose[0:3] = position
+        self.robot.reset(eef_target_pose)
+        # make sure the target joint positions are also set correctly
+        # otherwise the robot "wants to jump back to its previous position"
+        # TODO: this should be handled in robot reset by cancelling all forces and setting targets correctly.
+        self._move_robot(position, gripper_z_orientation, max_steps=100)
 
     def get_oracle_action(self):
         if self.use_motion_primitive:
@@ -265,9 +288,8 @@ class UR3ePick(gym.Env):
 
     def _oracle_get_pick_pose(self) -> np.ndarray:
         # get heighest object from list
-        random_object_id = np.random.choice(
-            np.array(self.workspace_object_ids)
-        )  # np.argmax(np.array(self._get_object_heights(self.object_ids)))
+        random_object_id = np.random.choice(np.array(self.workspace_object_ids))
+
         # get position of that object
         heighest_object_position = p.getBasePositionAndOrientation(random_object_id)[0]
         heighest_object_position = np.array(heighest_object_position)
@@ -296,11 +318,16 @@ class UR3ePick(gym.Env):
         heightest_object_index = np.argmax(np.array(self._get_object_heights(self.workspace_object_ids)))
         return self.workspace_object_ids[heightest_object_index]
 
-    def _drop_in_bin(self):
+    def _drop_in_bin(self, object_id):
         bin_posisition = p.getBasePositionAndOrientation(self.basket_id)[0]
         drop_position = np.array(bin_posisition) + np.array([0, 0, 0.15])
-        self._move_robot(drop_position)
-        self.gripper.open_gripper()
+
+        if self.simulate_realtime:
+            self._move_robot(drop_position)
+            self.gripper.open_gripper()
+        else:
+            # just drop object in bin w/o moving robot, which will then be reset anyways.
+            p.resetBasePositionAndOrientation(object_id, drop_position, [0, 0, 0, 1])
 
     def _image_coords_to_world(self, u: int, v: int, depth_map: np.ndarray) -> np.ndarray:
         img_coords = np.array([u, v, 1.0])
@@ -347,7 +374,7 @@ class UR3ePick(gym.Env):
 if __name__ == "__main__":
     import time
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
 
     env = UR3ePick(simulate_realtime=True, pybullet_mode=p.GUI)
     while True:
@@ -356,7 +383,7 @@ if __name__ == "__main__":
         post_reset_time = time.time()
         done = False
         while not done:
-            # img = obs[:, :, :3]
+            img = obs[:, :, :3]
             # plt.imshow(obs[:, :, :3])
             # plt.show()
             # u = int(input("u"))
