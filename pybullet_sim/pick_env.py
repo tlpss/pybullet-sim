@@ -8,12 +8,14 @@ import gym
 import numpy as np
 import pybullet as p
 import pybullet_data
+import tqdm
 from gym import spaces
 
 from pybullet_sim.assets.path import get_asset_root_folder
 from pybullet_sim.hardware.gripper import WSG50
 from pybullet_sim.hardware.ur3e import UR3e
 from pybullet_sim.hardware.zed2i import Zed2i
+from pybullet_sim.utils.demonstrations import Demonstration, save_visual_demonstrations
 from pybullet_sim.utils.pybullet_utils import disable_debug_rendering, enable_debug_rendering, get_pybullet_mode
 
 ASSET_PATH = get_asset_root_folder()
@@ -31,6 +33,8 @@ class ObjectConfig:
 
 class UR3ePick(gym.Env):
     image_dimensions = (64, 64)
+    # names for the different observations when collecting demonstrations
+    demonstration_observation_names = ("rgb", "depth")
 
     initial_eef_pose = [0.4, 0.1, 0.2, 1, 0, 0, 0]  # robot should be out of view.
     pick_workspace_x_range = (
@@ -370,13 +374,47 @@ class UR3ePick(gym.Env):
                 # the robot interactions..
                 # time.sleep(1/240)
 
+    def collect_demonstrations(self, n_demonstrations: int, path: str):
+        """
+        Collects and stores demonstrations of the task using the oracle policy. The observation and action type
+        are taken from the class instance. Demonstrations are stored as a pickle of a  List of ur-sim::Demonstration's
+
+
+        :param n_demonstrations:
+        :param path: path to store the pickle file
+        :return: List of demonstrations
+        """
+        # TODO: this is a copy from other env. should be moved to a base Env to avoid duplication.
+        def store_observation(demonstration: Demonstration, obs):
+            demonstration.images[UR3ePick.demonstration_observation_names[0]].append(obs[..., :3])
+            demonstration.images[UR3ePick.demonstration_observation_names[1]].append(obs[..., 3])
+
+        demonstrations = []
+        for i in tqdm.trange(n_demonstrations):
+            demonstration = Demonstration()
+            obs = self.reset()
+            done = False
+            store_observation(demonstration, obs)
+            while not done:
+                action = self.get_oracle_action()
+                obs, reward, done, _ = self.step(action)
+                demonstration.actions.append(action)
+                demonstration.rewards.append(reward)
+                demonstration.dones.append(done)
+                store_observation(demonstration, obs)
+            demonstrations.append(demonstration)
+
+        save_visual_demonstrations(demonstrations, path)
+        return demonstrations
+
 
 if __name__ == "__main__":
     import time
 
     logging.basicConfig(level=logging.DEBUG)
 
-    env = UR3ePick(simulate_realtime=True, pybullet_mode=p.GUI)
+    env = UR3ePick(simulate_realtime=False, pybullet_mode=p.DIRECT)
+    env.collect_demonstrations(2, "pick_env_spatial_actions")
     while True:
         start_time = time.time()
         obs = env.reset()

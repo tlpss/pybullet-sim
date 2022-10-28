@@ -1,5 +1,4 @@
 import logging
-import pickle
 from enum import Enum
 from typing import Any, List, Tuple
 
@@ -50,6 +49,8 @@ class UR3ePush(gym.Env):
     eef_space_bounds = (-0.35, 0.2, -0.48, -0.22, 0.015, 0.15)  # (min_x,max_x,min_y,max_y,min_z,max_z)[m]
 
     image_dimensions = (128, 128)  # dimensions of rgb observation
+    # names for the different observations when collecting demonstrations
+    demonstration_observation_names = ("rgb",)
 
     def __init__(self, state_observation=False, push_primitive=False, real_time=False):
         super().__init__()
@@ -376,25 +377,29 @@ class UR3ePush(gym.Env):
         :param path: path to store the pickle file
         :return: List of demonstrations
         """
+
+        def store_observation(demonstration: Demonstration, obs, use_state_observation: bool):
+            if use_state_observation:
+                demonstration.states.append(obs)
+            else:
+                demonstration.images[UR3ePush.demonstration_observation_names[0]].append(obs)
+
         demonstrations = []
         for i in tqdm.trange(n_demonstrations):
             demonstration = Demonstration()
             obs = self.reset()
             done = False
-            demonstration.observations.append(obs)
+            store_observation(demonstration, obs, self.use_state_observation)
             while not done:
                 action = self.oracle_step()
                 obs, reward, done, _ = self.step(action)
                 demonstration.actions.append(action)
-                demonstration.observations.append(obs)
+                demonstration.rewards.append(reward)
+                demonstration.dones.append(done)
+                store_observation(demonstration, obs, self.use_state_observation)
             demonstrations.append(demonstration)
 
-        if self.use_state_observation:
-            # store demonstrations in pickle file
-            with open(path, "wb") as handle:
-                pickle.dump(demonstrations, handle)
-        else:
-            save_visual_demonstrations(demonstrations, path)
+        save_visual_demonstrations(demonstrations, path)
 
         return demonstrations
 
@@ -475,8 +480,8 @@ class UR3ePush(gym.Env):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
 
-    env = UR3ePush(real_time=True, push_primitive=False, state_observation=True)
-    # env.collect_demonstrations(10, "demonstrations_dataset")
+    env = UR3ePush(real_time=True, push_primitive=False, state_observation=False)
+    env.collect_demonstrations(2, "demonstrations_dataset")
     done = True
     while True:
         if done:
