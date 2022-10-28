@@ -87,36 +87,33 @@ class UR3ePick(gym.Env):
 
         # creation of the environment
         if p.isConnected():
-            self.robot.reset(UR3ePick.initial_eef_pose)
-
-            # remove all current objects
-            for id in self.all_object_ids:
-                p.removeBody(id)
+            p.resetSimulation()
 
         else:
-            # initialize pybullet
             p.connect(self.pybullet_mode)  # or p.DIRECT for non-graphical version
-            disable_debug_rendering()  # will do nothing if not enabled.
+        
+        # just create them from scratch each time, somehow this is faster than not resetting the simulator...
+        disable_debug_rendering()  # will do nothing if not enabled.
 
-            p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
-            p.setGravity(0, 0, -2)  # makes life easier..
-            self._setup_debug_visualisation()
+        p.setAdditionalSearchPath(pybullet_data.getDataPath())  # optionally
+        p.setGravity(0, 0, -2)  # makes life easier..
+        self._setup_debug_visualisation()
 
-            self.plane_id = p.loadURDF("plane.urdf", [0, 0, -1.0])
-            p.loadURDF(str(ASSET_PATH / "ur3e_workspace" / "workspace.urdf"), [0, -0.3, -0.01])
+        self.plane_id = p.loadURDF("plane.urdf", [0, 0, -1.0])
+        p.loadURDF(str(ASSET_PATH / "ur3e_workspace" / "workspace.urdf"), [0, -0.3, -0.01])
 
-            self.table_id = p.loadURDF(str(ASSET_PATH / "ur3e_workspace" / "workspace.urdf"), [0, -0.3, -0.001])
-            self.basket_id = p.loadURDF(
-                "tray/tray.urdf", [0.4, -0.2, 0.01], [0, 0, 1, 0], globalScaling=0.6, useFixedBase=True
-            )
-            self.gripper = WSG50(
-                simulate_realtime=self.simulate_realtime
-            )  # DON'T USE ROBOTIQ! physics are not stable..
-            self.robot = UR3e(
-                eef_start_pose=UR3ePick.initial_eef_pose,
-                gripper=self.gripper,
-                simulate_real_time=self.simulate_realtime,
-            )
+        self.table_id = p.loadURDF(str(ASSET_PATH / "ur3e_workspace" / "workspace.urdf"), [0, -0.3, -0.001])
+        self.basket_id = p.loadURDF(
+            "tray/tray.urdf", [0.4, -0.2, 0.01], [0, 0, 1, 0], globalScaling=0.6, useFixedBase=True
+        )
+        self.gripper = WSG50(
+            simulate_realtime=self.simulate_realtime
+        )  # DON'T USE ROBOTIQ! physics are not stable..
+        self.robot = UR3e(
+            eef_start_pose=UR3ePick.initial_eef_pose,
+            gripper=self.gripper,
+            simulate_real_time=self.simulate_realtime,
+        )
 
         self.spawn_objects()
 
@@ -196,7 +193,6 @@ class UR3ePick(gym.Env):
         # now wait untill all objects have stopped moving before taking an image
         # slightly unrealistic but it helps to make things Markovian
         # which makes it easier to learn for the policy.
-
         self._wait_untill_all_objects_stop_moving()
         self._prune_objects_outside_of_workspace()
         done = self._done()  # after bookkeeping!
@@ -276,7 +272,7 @@ class UR3ePick(gym.Env):
         # make sure the target joint positions are also set correctly
         # otherwise the robot "wants to jump back to its previous position"
         # TODO: this should be handled in robot reset by cancelling all forces and setting targets correctly.
-        self._move_robot(position, gripper_z_orientation, max_steps=100)
+        self._move_robot(position, gripper_z_orientation, max_steps=20)
 
     def get_oracle_action(self):
         if self.use_motion_primitive:
@@ -352,7 +348,7 @@ class UR3ePick(gym.Env):
     def _is_any_object_moving(self) -> bool:
         for object in self.workspace_object_ids:
             lin_vel, angular_vel = p.getBaseVelocity(object)
-            if np.linalg.norm(np.array(list(lin_vel))) > 0.05 or np.linalg.norm(np.array(list(angular_vel))) > 0.01:
+            if np.linalg.norm(np.array(list(lin_vel))) > 0.05 or np.linalg.norm(np.array(list(angular_vel))) > 0.05:
                 return True
         return False
 
@@ -361,14 +357,17 @@ class UR3ePick(gym.Env):
         for _ in range(30):
             p.stepSimulation()
         # keep stepping untill all have stopped moving
-        while self._is_any_object_moving():
-            p.stepSimulation()
-            if self.simulate_realtime:
-                pass
-                # not simulate this in realtime to increase speed.
-                # might result in some strange behaviour but does not influence
-                # the robot interactions..
-                # time.sleep(1/240)
+        for _ in range(1000):
+            if self._is_any_object_moving():
+                p.stepSimulation()
+                if self.simulate_realtime:
+                    pass
+                    # not simulate this in realtime to increase speed.
+                    # might result in some strange behaviour but does not influence
+                    # the robot interactions..
+                    # time.sleep(1/240)
+            else:
+                return 
 
 
 if __name__ == "__main__":
@@ -376,7 +375,7 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.DEBUG)
 
-    env = UR3ePick(simulate_realtime=True, pybullet_mode=p.GUI)
+    env = UR3ePick(simulate_realtime=False, pybullet_mode=p.DIRECT)
     while True:
         start_time = time.time()
         obs = env.reset()
