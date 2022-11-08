@@ -114,6 +114,12 @@ class WSG50(Gripper):
         abs_position = WSG50.open_position + (WSG50.closed_position - WSG50.open_position) * relative_position
         return abs_position
 
+    def get_left_finger_position_and_orientation(self):
+        state = p.getLinkState(self.gripper_id,0)
+        return np.array(state[4]), np.array(state[5])
+    def get_right_finger_position_and_orientation(self):
+        state = p.getLinkState(self.gripper_id,3)
+        return np.array(state[4]), np.array(state[5])
 
 class Robotiq2F85(Gripper):
     """
@@ -235,12 +241,17 @@ if __name__ == "__main__":
     gripper1.close_gripper()
     gripper2.close_gripper()
 
-    robot1.movep([0.2, -0.2, 0.0, 1, 0, 0, 0], speed=0.001)
+    robot1.movep([0.2, -0.2, 0.01, 1, 0, 0, 0], speed=0.001)
     gripper1.open_gripper()
     gripper1.close_gripper()
 
     robot2.movep([0.2, -0.2, 0.2, 1, 0, 0, 0], speed=0.001)  # TODO: fix bug w/ base_position for robots.
     gripper2.open_gripper()
     gripper2.close_gripper()
-    time.sleep(10)
+
+    point = gripper1.get_left_finger_position_and_orientation()[0]
+    print(point)
+    p.addUserDebugPoints([point],[[1.0,0,0]],25)
+    p.addUserDebugLine(point,[0.0,0.0,0.0])
+    time.sleep(100)
     p.disconnect()
