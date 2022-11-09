@@ -115,11 +115,13 @@ class WSG50(Gripper):
         return abs_position
 
     def get_left_finger_position_and_orientation(self):
-        state = p.getLinkState(self.gripper_id,0)
+        state = p.getLinkState(self.gripper_id, 1)
         return np.array(state[4]), np.array(state[5])
+
     def get_right_finger_position_and_orientation(self):
-        state = p.getLinkState(self.gripper_id,3)
+        state = p.getLinkState(self.gripper_id, 3)
         return np.array(state[4]), np.array(state[5])
+
 
 class Robotiq2F85(Gripper):
     """
@@ -230,28 +232,25 @@ if __name__ == "__main__":
 
     p.resetDebugVisualizerCamera(cameraDistance=1.8, cameraYaw=0, cameraPitch=-45, cameraTargetPosition=target)
     gripper1 = WSG50()
-    robot1 = UR3e(simulate_real_time=True, gripper=gripper1, eef_start_pose=np.array([0.2, -0.1, 0.3, 1, 0, 0, 0]))
-
-    gripper2 = Robotiq2F85()
-    robot2 = UR3e(simulate_real_time=True, robot_base_position=[0.5, 0.0, 0.0], gripper=gripper2)
+    robot1 = UR3e(
+        robot_base_position=[0.0, 0.0, 0.0],
+        simulate_real_time=True,
+        gripper=gripper1,
+        eef_start_pose=np.array([0.2, -0.1, 0.3, 1, 0, 0, 0]),
+    )
+    robot1.movep([0.2, -0.5, 0.0, 1.0, 0, 0, 0])
 
     for i in range(p.getNumJoints(gripper1.gripper_id)):
         print(p.getJointInfo(gripper1.gripper_id, i))
 
-    gripper1.close_gripper()
-    gripper2.close_gripper()
-
-    robot1.movep([0.2, -0.2, 0.01, 1, 0, 0, 0], speed=0.001)
-    gripper1.open_gripper()
-    gripper1.close_gripper()
-
-    robot2.movep([0.2, -0.2, 0.2, 1, 0, 0, 0], speed=0.001)  # TODO: fix bug w/ base_position for robots.
-    gripper2.open_gripper()
-    gripper2.close_gripper()
-
     point = gripper1.get_left_finger_position_and_orientation()[0]
     print(point)
-    p.addUserDebugPoints([point],[[1.0,0,0]],25)
-    p.addUserDebugLine(point,[0.0,0.0,0.0])
+    p.addUserDebugPoints([point], [[1.0, 0, 0]], 25)
+    p.addUserDebugLine(point, [0.0, 0.0, 0.0])
+
+    point = gripper1.get_right_finger_position_and_orientation()[0]
+    print(point)
+    p.addUserDebugPoints([point], [[1.0, 0, 0]], 25)
+    p.addUserDebugLine(point, [0.0, 0.0, 0.0])
     time.sleep(100)
     p.disconnect()

@@ -67,7 +67,7 @@
     <!-- LEFT FINGER -->
 
     <joint name="guide_joint_finger_left" type="fixed">
-        <origin xyz="0 0 0.023" rpy="0 0 0" />
+        <origin xyz="-0.0051 0 0.113" rpy="0 0 0" />
         <parent link="gripper_left" />
         <child link="finger_left" />
         <axis xyz="1 0 0" />
@@ -81,7 +81,7 @@
         </inertial>
 
         <visual>
-            <origin xyz="-0.0051 0 0.09" rpy="0 0 0" />
+            <origin xyz="0.0 0 0.0" rpy="0 0 0" />
             <geometry>
                 <box size="0.013 0.02 0.08" />
             </geometry>
@@ -91,7 +91,7 @@
         </visual>
         <!--manually tuned.. not 100%-->
         <collision>
-            <origin xyz="-0.0051 0 0.09" rpy="0 0 0" />
+            <origin xyz="0.0 0 0.0" rpy="0 0 0" />
             <geometry>
                 <box size="0.013 0.02 0.08" />
             </geometry>
@@ -123,7 +123,7 @@
                 <mesh filename="meshes/GUIDE_WSG50_110.stl" scale="0.001 0.001 0.001" />
                 <!--box size="0.0175 0.03 0.024"/-->
             </geometry>
-            
+
             <material name="black">
                 <color rgba="0 0 0 1" />
             </material>
@@ -142,7 +142,7 @@
     <!-- RIGHT FINGER -->
 
     <joint name="guide_joint_finger_right" type="fixed">
-        <origin xyz="0 0 0.023" rpy="0 0 0" />
+        <origin xyz="0.0051 0 0.113" rpy="0 0 0" />
         <parent link="gripper_right" />
         <child link="finger_right" />
         <axis xyz="1 0 0" />
@@ -160,7 +160,7 @@
             <geometry>
                 <mesh filename="meshes/WSG-FMF.stl" scale="0.001 0.001 0.001" />
             </geometry> -->
-            <origin xyz="-0.0051 0 0.09" rpy="0 0 0" />
+            <origin xyz="0.0 0 0.0" rpy="0 0 0" />
             <geometry>
                 <box size="0.013 0.02 0.08" />
             </geometry>
@@ -171,7 +171,7 @@
 
         <!--manually tuned.. not 100%-->
         <collision>
-            <origin xyz="-0.0051 0 0.09" rpy="0 0 0" />
+            <origin xyz="0.0 0 0.0" rpy="0 0 0" />
             <geometry>
                 <box size="0.013 0.02 0.08" />
             </geometry>
