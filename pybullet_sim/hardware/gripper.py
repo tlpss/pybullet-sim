@@ -116,11 +116,11 @@ class WSG50(Gripper):
 
     def get_left_finger_position_and_orientation(self):
         state = p.getLinkState(self.gripper_id, 1)
-        return np.array(state[4]), np.array(state[5])
+        return np.array(state[0]), np.array(state[1])
 
     def get_right_finger_position_and_orientation(self):
         state = p.getLinkState(self.gripper_id, 3)
-        return np.array(state[4]), np.array(state[5])
+        return np.array(state[0]), np.array(state[1])
 
 
 class Robotiq2F85(Gripper):
